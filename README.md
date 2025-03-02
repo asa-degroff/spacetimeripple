@@ -38,7 +38,7 @@ A mesmerizing interactive animation that combines a dynamic grid system with Per
    npm run dev
    ```
 
-4. Open your browser and navigate to `http://localhost:5173`
+4. Open your browser and navigate to the given URL
 
 ## How It Works
 
@@ -57,10 +57,6 @@ The entire visualization is implemented using WGSL (WebGPU Shading Language) for
 - Implements Perlin noise for natural wave generation
 - Utilizes compute shaders for ripple physics calculations
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -68,4 +64,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - WebGPU for providing the next-generation graphics API
-- The amazing web graphics community for inspiration and resources
+- Ken Perlin for creating Perlin noise
