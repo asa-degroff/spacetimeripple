@@ -79,6 +79,7 @@ class RippleManager {
         this.lastRippleTime = 0;
         this.minRippleInterval = 25; // ms between ripples
         this.maxAge = 2.0; // seconds
+        this.activeRippleCount = 0; // Track number of active ripples
     }
 
     addRipple(x, y, timestamp) {
@@ -103,23 +104,48 @@ class RippleManager {
     update(timestamp) {
         const currentTime = timestamp / 1000.0; // Convert to seconds
         
+        // Filter out expired ripples
         this.ripples = this.ripples.filter(ripple => {
             const age = currentTime - ripple.startTime;
             ripple.strength = 1.0 - (age / this.maxAge);
             return age < this.maxAge;
         });
 
+        // Sort ripples by strength (strongest first)
+        // This ensures the most visible ripples are processed first in the shader
+        this.ripples.sort((a, b) => b.strength - a.strength);
+        
+        // Track active ripple count (those with meaningful strength)
+        const STRENGTH_THRESHOLD = 0.01; // Ripples below this threshold are not visible
+        const activeRipples = this.ripples.filter(ripple => ripple.strength > STRENGTH_THRESHOLD);
+        this.activeRippleCount = activeRipples.length;
+        
         // Return array for GPU: [x, y, strength, startTime] for each ripple
+        // Fill with active ripples first, then pad with inactive ones
         const rippleData = new Float32Array(this.maxRipples * 4);
-        this.ripples.forEach((ripple, i) => {
+        
+        // Add active ripples
+        activeRipples.forEach((ripple, i) => {
             const baseIndex = i * 4;
             rippleData[baseIndex] = ripple.x;
             rippleData[baseIndex + 1] = ripple.y;
             rippleData[baseIndex + 2] = ripple.strength;
-            rippleData[baseIndex + 3] = ripple.startTime; // Send actual start time in seconds
+            rippleData[baseIndex + 3] = ripple.startTime;
         });
+        
+        // Fill remaining slots with inactive ripples (strength = 0)
+        for (let i = this.activeRippleCount; i < this.maxRipples; i++) {
+            const baseIndex = i * 4;
+            rippleData[baseIndex] = 0;
+            rippleData[baseIndex + 1] = 0;
+            rippleData[baseIndex + 2] = 0; // strength = 0 means shader will skip this ripple
+            rippleData[baseIndex + 3] = 0;
+        }
 
-        return rippleData;
+        return {
+            data: rippleData,
+            activeCount: this.activeRippleCount
+        };
     }
 }
 
@@ -196,7 +222,7 @@ async function init() {
 
     // Create uniform buffers
     const timeUniformBuffer = device.createBuffer({
-        size: 32, // Increased to 32 bytes (time: f32, aspect ratio: f32, padding: f32)
+        size: 48, // Increased to 48 bytes (time: f32, aspect ratio: f32, activeRippleCount: f32, padding: f32)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -269,17 +295,17 @@ async function init() {
 
     // Animation loop
     function frame(timestamp) {
+        // Update and write ripple data
+        const rippleResult = rippleManager.update(timestamp);
+        device.queue.writeBuffer(rippleUniformBuffer, 0, rippleResult.data);
+        
         const timeUniforms = new Float32Array([
             timestamp / 1000, // time
             canvas.width / canvas.height, // aspect ratio
-            0, // padding for alignment
+            rippleResult.activeCount, // number of active ripples
             0, // padding for alignment
         ]);
         device.queue.writeBuffer(timeUniformBuffer, 0, timeUniforms);
-
-        // Update and write ripple data
-        const rippleData = rippleManager.update(timestamp);
-        device.queue.writeBuffer(rippleUniformBuffer, 0, rippleData);
 
         const commandEncoder = device.createCommandEncoder();
         const passEncoder = commandEncoder.beginRenderPass({

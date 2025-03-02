@@ -6,8 +6,8 @@ struct VertexOutput {
 struct Uniforms {
     time: f32,
     aspect_ratio: f32,
-    _padding1: f32,
-    _padding2: f32,
+    active_ripple_count: f32,
+    _padding: f32,
 }
 
 struct RippleData {
@@ -163,7 +163,10 @@ fn fragmentMain(@location(0) uv: vec2f) -> @location(0) vec4f {
     
     // Calculate ripple distortion
     var totalRippleDistortion: f32 = 0.0;
-    for (var i = 0; i < 128; i++) {
+    
+    // Only process active ripples
+    let activeCount = min(u32(uniforms.active_ripple_count), 128u);
+    for (var i = 0u; i < activeCount; i++) {
         totalRippleDistortion += calculateRipple(uv, ripples[i]);
     }
     
