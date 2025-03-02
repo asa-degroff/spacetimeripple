@@ -75,11 +75,29 @@ async function loadShaders() {
 class RippleManager {
     constructor(maxRipples = 128) {
         this.maxRipples = maxRipples;
-        this.ripples = [];
+        
+        // Pre-allocate ripples array with fixed size objects
+        // This avoids memory allocations during animation
+        this.ripples = new Array(maxRipples);
+        for (let i = 0; i < maxRipples; i++) {
+            this.ripples[i] = {
+                x: 0,
+                y: 0,
+                startTime: 0,
+                strength: 0,
+                active: false
+            };
+        }
+        
+        // Track indices for efficient array management
+        this.nextRippleIndex = 0;
         this.lastRippleTime = 0;
         this.minRippleInterval = 25; // ms between ripples
         this.maxAge = 2.0; // seconds
-        this.activeRippleCount = 0; // Track number of active ripples
+        this.activeRippleCount = 0;
+        
+        // Pre-allocate ripple data array to avoid allocation in update
+        this.rippleData = new Float32Array(this.maxRipples * 4);
     }
 
     addRipple(x, y, timestamp) {
@@ -87,63 +105,63 @@ class RippleManager {
             return;
         }
 
-        this.ripples.push({
-            x,
-            y,
-            startTime: timestamp / 1000.0, // Convert to seconds
-            strength: 1.0
-        });
-
-        if (this.ripples.length > this.maxRipples) {
-            this.ripples.shift();
-        }
-
+        // Reuse existing ripple object instead of creating new one
+        const ripple = this.ripples[this.nextRippleIndex];
+        ripple.x = x;
+        ripple.y = y;
+        ripple.startTime = timestamp / 1000.0; // Convert to seconds
+        ripple.strength = 1.0;
+        ripple.active = true;
+        
+        // Update index for next ripple (circular buffer pattern)
+        this.nextRippleIndex = (this.nextRippleIndex + 1) % this.maxRipples;
         this.lastRippleTime = timestamp;
     }
 
     update(timestamp) {
         const currentTime = timestamp / 1000.0; // Convert to seconds
+        this.activeRippleCount = 0;
         
-        // Filter out expired ripples
-        this.ripples = this.ripples.filter(ripple => {
+        // First pass: update strengths and count active ripples
+        const STRENGTH_THRESHOLD = 0.01;
+        for (let i = 0; i < this.maxRipples; i++) {
+            const ripple = this.ripples[i];
+            if (!ripple.active) continue;
+            
             const age = currentTime - ripple.startTime;
+            if (age >= this.maxAge) {
+                // Deactivate expired ripples
+                ripple.active = false;
+                ripple.strength = 0;
+                continue;
+            }
+            
+            // Update strength
             ripple.strength = 1.0 - (age / this.maxAge);
-            return age < this.maxAge;
-        });
-
-        // Sort ripples by strength (strongest first)
-        // This ensures the most visible ripples are processed first in the shader
-        this.ripples.sort((a, b) => b.strength - a.strength);
+            
+            // Count active ripples above threshold
+            if (ripple.strength > STRENGTH_THRESHOLD) {
+                // Place active ripples at the beginning of the data array
+                const baseIndex = this.activeRippleCount * 4;
+                this.rippleData[baseIndex] = ripple.x;
+                this.rippleData[baseIndex + 1] = ripple.y;
+                this.rippleData[baseIndex + 2] = ripple.strength;
+                this.rippleData[baseIndex + 3] = ripple.startTime;
+                this.activeRippleCount++;
+            } else {
+                // Deactivate weak ripples
+                ripple.active = false;
+            }
+        }
         
-        // Track active ripple count (those with meaningful strength)
-        const STRENGTH_THRESHOLD = 0.01; // Ripples below this threshold are not visible
-        const activeRipples = this.ripples.filter(ripple => ripple.strength > STRENGTH_THRESHOLD);
-        this.activeRippleCount = activeRipples.length;
-        
-        // Return array for GPU: [x, y, strength, startTime] for each ripple
-        // Fill with active ripples first, then pad with inactive ones
-        const rippleData = new Float32Array(this.maxRipples * 4);
-        
-        // Add active ripples
-        activeRipples.forEach((ripple, i) => {
-            const baseIndex = i * 4;
-            rippleData[baseIndex] = ripple.x;
-            rippleData[baseIndex + 1] = ripple.y;
-            rippleData[baseIndex + 2] = ripple.strength;
-            rippleData[baseIndex + 3] = ripple.startTime;
-        });
-        
-        // Fill remaining slots with inactive ripples (strength = 0)
+        // Clear remaining slots in ripple data
         for (let i = this.activeRippleCount; i < this.maxRipples; i++) {
             const baseIndex = i * 4;
-            rippleData[baseIndex] = 0;
-            rippleData[baseIndex + 1] = 0;
-            rippleData[baseIndex + 2] = 0; // strength = 0 means shader will skip this ripple
-            rippleData[baseIndex + 3] = 0;
+            this.rippleData[baseIndex + 2] = 0; // Only need to zero out strength
         }
 
         return {
-            data: rippleData,
+            data: this.rippleData,
             activeCount: this.activeRippleCount
         };
     }
@@ -267,34 +285,63 @@ async function init() {
     // Initialize ripple manager
     const rippleManager = new RippleManager();
 
-    // Add interaction handlers
+    // Optimize mouse input handling
     let isMouseDown = false;
-    canvas.addEventListener('mousedown', (e) => {
+    let lastMouseX = 0, lastMouseY = 0;
+    let canvasRect = canvas.getBoundingClientRect();
+    
+    // Update canvas rect on resize
+    const updateCanvasRect = () => {
+        canvasRect = canvas.getBoundingClientRect();
+    };
+    
+    // Add resize observer for more reliable size updates
+    const resizeObserver = new ResizeObserver(updateCanvasRect);
+    resizeObserver.observe(canvas);
+    window.addEventListener('resize', updateCanvasRect);
+    
+    // Convert mouse/pointer position to normalized coordinates
+    const getNormalizedCoordinates = (clientX, clientY) => {
+        return {
+            x: (clientX - canvasRect.left) / canvasRect.width,
+            y: 1.0 - (clientY - canvasRect.top) / canvasRect.height
+        };
+    };
+
+    // Use pointer events for better performance across devices
+    canvas.addEventListener('pointerdown', (e) => {
         isMouseDown = true;
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = 1.0 - (e.clientY - rect.top) / rect.height;
-        rippleManager.addRipple(x, y, performance.now());
-    });
+        const coords = getNormalizedCoordinates(e.clientX, e.clientY);
+        lastMouseX = coords.x;
+        lastMouseY = coords.y;
+        // Still add a ripple immediately on pointer down for responsiveness
+        rippleManager.addRipple(coords.x, coords.y, performance.now());
+    }, { passive: true });
 
-    canvas.addEventListener('mousemove', (e) => {
+    canvas.addEventListener('pointermove', (e) => {
         if (!isMouseDown) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = 1.0 - (e.clientY - rect.top) / rect.height;
-        rippleManager.addRipple(x, y, performance.now());
-    });
+        const coords = getNormalizedCoordinates(e.clientX, e.clientY);
+        lastMouseX = coords.x;
+        lastMouseY = coords.y;
+        // Store position but don't add ripple here - will be added in animation frame
+    }, { passive: true });
 
-    canvas.addEventListener('mouseup', () => {
+    canvas.addEventListener('pointerup', () => {
         isMouseDown = false;
-    });
+    }, { passive: true });
 
-    canvas.addEventListener('mouseleave', () => {
+    canvas.addEventListener('pointerleave', () => {
         isMouseDown = false;
-    });
+    }, { passive: true });
 
     // Animation loop
     function frame(timestamp) {
+        // Add ripple at current mouse position if mouse is down
+        // This synchronizes ripple creation with the render loop
+        if (isMouseDown) {
+            rippleManager.addRipple(lastMouseX, lastMouseY, timestamp);
+        }
+        
         // Update and write ripple data
         const rippleResult = rippleManager.update(timestamp);
         device.queue.writeBuffer(rippleUniformBuffer, 0, rippleResult.data);
