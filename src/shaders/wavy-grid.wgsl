@@ -17,7 +17,7 @@ struct RippleData {
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var<uniform> ripples: array<RippleData, 64>;
+@group(0) @binding(1) var<uniform> ripples: array<RippleData, 128>;
 
 const PI: f32 = 3.14159265359;
 const GRID_VERTICAL_SIZE: f32 = 15.0;
@@ -163,7 +163,7 @@ fn fragmentMain(@location(0) uv: vec2f) -> @location(0) vec4f {
     
     // Calculate ripple distortion
     var totalRippleDistortion: f32 = 0.0;
-    for (var i = 0; i < 64; i++) {
+    for (var i = 0; i < 128; i++) {
         totalRippleDistortion += calculateRipple(uv, ripples[i]);
     }
     

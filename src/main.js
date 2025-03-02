@@ -73,11 +73,11 @@ async function loadShaders() {
 
 // Ripple management class
 class RippleManager {
-    constructor(maxRipples = 64) {
+    constructor(maxRipples = 128) {
         this.maxRipples = maxRipples;
         this.ripples = [];
         this.lastRippleTime = 0;
-        this.minRippleInterval = 50; // ms between ripples
+        this.minRippleInterval = 25; // ms between ripples
         this.maxAge = 2.0; // seconds
     }
 
@@ -201,7 +201,7 @@ async function init() {
     });
 
     const rippleUniformBuffer = device.createBuffer({
-        size: 1024, // 64 ripples * 16 bytes each (vec2f + 2 * f32)
+        size: 2048, // 128 ripples * 16 bytes each (vec2f + 2 * f32)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
