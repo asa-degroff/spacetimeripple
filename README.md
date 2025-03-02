@@ -9,7 +9,7 @@ A mesmerizing interactive animation that combines a dynamic grid system with Per
 - 🌊 Smooth, naturally animated grid using Perlin noise
 - 🖱️ Interactive ripple effects on mouse drag
 - ⚡ High-performance WebGPU shader implementation
-- 📱 Responsive design that adapts to viewport size
+- 🖥️ Adaptable viewport size
 
 ## Live Demo
 
@@ -24,7 +24,7 @@ A mesmerizing interactive animation that combines a dynamic grid system with Per
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/spacetimeripple.git
+   git clone https://github.com/asa-degroff/spacetimeripple.git
    cd spacetimeripple
    ```
 
