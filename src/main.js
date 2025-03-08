@@ -56,12 +56,6 @@ async function initWebGPU() {
 
     const format = navigator.gpu.getPreferredCanvasFormat();
 
-    context.configure({
-        device,
-        format,
-        alphaMode: 'premultiplied',
-    });
-
     return { device, context, format, canvas };
 }
 
@@ -285,9 +279,13 @@ async function init() {
     // Initialize ripple manager
     const rippleManager = new RippleManager();
 
+    // Get cursor dot element for visual feedback
+    const cursorDot = document.getElementById('cursor-dot');
+
     // Optimize mouse input handling
     let isMouseDown = false;
     let lastMouseX = 0, lastMouseY = 0;
+    let lastClientX = 0, lastClientY = 0;
     let canvasRect = canvas.getBoundingClientRect();
     
     // Update canvas rect on resize
@@ -307,6 +305,13 @@ async function init() {
             y: 1.0 - (clientY - canvasRect.top) / canvasRect.height
         };
     };
+    
+    // Update cursor dot position
+    const updateCursorDot = (clientX, clientY, visible) => {
+        cursorDot.style.left = `${clientX}px`;
+        cursorDot.style.top = `${clientY}px`;
+        cursorDot.style.opacity = visible ? '1' : '0';
+    };
 
     // Use pointer events for better performance across devices
     canvas.addEventListener('pointerdown', (e) => {
@@ -314,6 +319,10 @@ async function init() {
         const coords = getNormalizedCoordinates(e.clientX, e.clientY);
         lastMouseX = coords.x;
         lastMouseY = coords.y;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        // Show the cursor dot
+        updateCursorDot(e.clientX, e.clientY, true);
         // Still add a ripple immediately on pointer down for responsiveness
         rippleManager.addRipple(coords.x, coords.y, performance.now());
     }, { passive: true });
@@ -323,15 +332,23 @@ async function init() {
         const coords = getNormalizedCoordinates(e.clientX, e.clientY);
         lastMouseX = coords.x;
         lastMouseY = coords.y;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        // Update cursor dot position
+        updateCursorDot(e.clientX, e.clientY, true);
         // Store position but don't add ripple here - will be added in animation frame
     }, { passive: true });
 
     canvas.addEventListener('pointerup', () => {
         isMouseDown = false;
+        // Hide the cursor dot
+        updateCursorDot(lastClientX, lastClientY, false);
     }, { passive: true });
 
     canvas.addEventListener('pointerleave', () => {
         isMouseDown = false;
+        // Hide the cursor dot
+        updateCursorDot(lastClientX, lastClientY, false);
     }, { passive: true });
 
     // Animation loop

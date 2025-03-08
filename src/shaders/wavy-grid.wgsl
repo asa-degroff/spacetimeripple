@@ -191,7 +191,7 @@ fn fragmentMain(@location(0) uv: vec2f) -> @location(0) vec4f {
     // Create grid lines with smooth edges and dark indigo background
     let lineIntensity = smoothstep(LINE_WIDTH, 0.0, distToLine);
     let backgroundColor = vec3f(0.05, 0.05, 0.15);
-    let lineColor = vec3f(1.0);
+    let lineColor = vec3f(0.95, 0.9, 1.0);
     let finalColor = mix(backgroundColor, lineColor, lineIntensity);
     
     return vec4f(finalColor, 1.0);
